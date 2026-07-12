@@ -1,3 +1,54 @@
+-- ==========================================
+-- WAIT FOR GAME TO LOAD (per Rayfield docs pattern)
+-- ==========================================
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+-- ==========================================
+-- LOAD RAYFIELD (must be first, per docs)
+-- ==========================================
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- ==========================================
+-- CREATE WINDOW
+-- ==========================================
+local Window = Rayfield:CreateWindow({
+    Name = "Auto Route Tool",
+    LoadingTitle = "Auto Route Tool",
+    LoadingSubtitle = "by YourName",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "AutoRouteTool",
+        FileName = "Settings"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "noinvitelink",
+        RememberJoins = true
+    },
+    KeySystem = false
+})
+
+local MainTab = Window:CreateTab("Main", 0)
+
+-- Forward-declared so the toggle callback below can reference them;
+-- actual functions are assigned further down in the script.
+local startFarming
+local stopFarming
+
+local farmToggle = MainTab:CreateToggle({
+    Name = "Farm exp (Feather bush)",
+    CurrentValue = false,
+    Flag = "FarmExpToggle",
+    Callback = function(Value)
+        if Value then
+            startFarming()
+        else
+            stopFarming()
+        end
+    end
+})
 
 -- ==========================================
 -- SERVICES
@@ -16,8 +67,6 @@ local player = Players.LocalPlayer
 local isMoving = false
 local autoRunning = false
 local character, rootPart, humanoid
-local farmToggle = nil
-local Rayfield = nil
 
 -- ==========================================
 -- STATUS LABEL
@@ -93,25 +142,25 @@ end
 
 local function safeSetCFrame(pos)
     if not rootPart or not rootPart.Parent then return false end
-    
+
     local yRot = 0
     local success = pcall(function()
         _, yRot, _ = rootPart.CFrame:ToEulerAnglesYXZ()
     end)
     if not success or yRot ~= yRot then yRot = 0 end
-    
+
     rootPart.CFrame = CFrame.new(pos) * CFrame.Angles(0, yRot, 0)
     return true
 end
 
 local function followPath(path)
-    if not path or #path < 2 or not rootPart or not rootPart.Parent then 
-        return false 
+    if not path or #path < 2 or not rootPart or not rootPart.Parent then
+        return false
     end
 
     local totalDist = 0
     local segmentDists = {}
-    
+
     for i = 2, #path do
         local d = math.max((path[i] - path[i - 1]).Magnitude, 0.001)
         table.insert(segmentDists, d)
@@ -128,7 +177,7 @@ local function followPath(path)
 
     while t < 1 and isMoving do
         if not rootPart or not rootPart.Parent then return false end
-        
+
         local rpPos = rootPart.Position
         local dt = os.clock() - lastTime
         lastTime = os.clock()
@@ -155,7 +204,7 @@ local function followPath(path)
 
         if not safeSetCFrame(currentPos) then return false end
         platform.CFrame = CFrame.new(rootPart.Position.X, rootPart.Position.Y - 3.5, rootPart.Position.Z)
-        
+
         RunService.Heartbeat:Wait()
     end
 
@@ -167,7 +216,7 @@ end
 
 local function tweenDirectlyTo(targetPos)
     if not rootPart or not rootPart.Parent then return false end
-    
+
     local startCF = rootPart.CFrame
     local dist = (startCF.Position - targetPos).Magnitude
     if dist < 0.5 then return true end
@@ -179,7 +228,7 @@ local function tweenDirectlyTo(targetPos)
 
     while t < 1 and isMoving do
         if not rootPart or not rootPart.Parent then return false end
-        
+
         local rpPos = rootPart.Position
         local dt = os.clock() - lastTime
         lastTime = os.clock()
@@ -191,10 +240,10 @@ local function tweenDirectlyTo(targetPos)
 
         t = math.clamp(t + (dt / duration), 0, 1)
         local newPos = startCF.Position:Lerp(targetPos, t)
-        
+
         if not safeSetCFrame(newPos) then return false end
         platform.CFrame = CFrame.new(rootPart.Position.X, rootPart.Position.Y - 3.5, rootPart.Position.Z)
-        
+
         RunService.Heartbeat:Wait()
     end
 
@@ -231,7 +280,7 @@ local function moveToTarget(targetPos, usePathfindingFirst)
             end
             usePathfindingFirst = true
         end
-        
+
         attempts = attempts + 1
         if autoRunning and attempts < maxRetries then
             task.wait(1)
@@ -352,21 +401,16 @@ if player.Character then onCharacterAdded(player.Character) end
 -- ==========================================
 -- FARMING LOGIC
 -- ==========================================
-local function startFarming()
+startFarming = function()
     if autoRunning then return end
 
     if not rootPart or not humanoid then
-        print("[FarmBot] No character found")
-        if Rayfield and farmToggle then
-            pcall(function()
-                Rayfield:Notify({
-                    Title = "Error",
-                    Content = "No character found!",
-                    Duration = 3
-                })
-                farmToggle:Set(false)
-            end)
-        end
+        Rayfield:Notify({
+            Title = "Error",
+            Content = "No character found!",
+            Duration = 3
+        })
+        farmToggle:Set(false)
         return
     end
 
@@ -460,7 +504,7 @@ local function startFarming()
                     if #essences > 0 then
                         local nearest = essences[1]
                         local minDist = (nearest.position - rootPart.Position).Magnitude
-                        
+
                         for i = 2, #essences do
                             local d = (essences[i].position - rootPart.Position).Magnitude
                             if d < minDist then
@@ -519,29 +563,20 @@ local function startFarming()
         end)
 
         if not success then
-            print("[FarmBot] Error during farming: " .. tostring(err))
-            if Rayfield then
-                pcall(function()
-                    Rayfield:Notify({
-                        Title = "Error",
-                        Content = tostring(err),
-                        Duration = 5
-                    })
-                end)
-            end
+            Rayfield:Notify({
+                Title = "Error",
+                Content = tostring(err),
+                Duration = 5
+            })
             setStatus("Error: " .. tostring(err))
         end
 
         cleanupMovement()
-        if farmToggle then
-            pcall(function()
-                farmToggle:Set(false)
-            end)
-        end
+        farmToggle:Set(false)
     end)
 end
 
-local function stopFarming()
+stopFarming = function()
     autoRunning = false
     isMoving = false
     cleanupMovement()
@@ -549,141 +584,6 @@ local function stopFarming()
 end
 
 -- ==========================================
--- LOAD RAYFIELD AND CREATE UI
+-- CLEANUP ON UI CLOSE
 -- ==========================================
-local function initializeUI()
-    print("[FarmBot] Attempting to load Rayfield...")
-    
-    -- Try loading Rayfield with HttpGet
-    local rayFieldCode
-    local getSuccess, getErr = pcall(function()
-        rayFieldCode = game:HttpGet("https://sirius.menu/rayfield")
-    end)
-    
-    if not getSuccess then
-        warn("[FarmBot] HttpGet failed: " .. tostring(getErr))
-        setStatus("HttpGet failed - check executor")
-        return false
-    end
-    
-    if not rayFieldCode or rayFieldCode == "" then
-        warn("[FarmBot] Rayfield code is empty")
-        setStatus("Rayfield returned empty")
-        return false
-    end
-    
-    -- Try loading the string
-    local loadSuccess, rayFieldLoader = pcall(loadstring, rayFieldCode)
-    
-    if not loadSuccess then
-        warn("[FarmBot] loadstring failed: " .. tostring(rayFieldLoader))
-        setStatus("loadstring failed")
-        return false
-    end
-    
-    if not rayFieldLoader or type(rayFieldLoader) ~= "function" then
-        warn("[FarmBot] Rayfield loader is not a function: " .. type(rayFieldLoader))
-        setStatus("Rayfield loader invalid")
-        return false
-    end
-    
-    -- Try executing the loader
-    local execSuccess, rayFieldResult = pcall(rayFieldLoader)
-    
-    if not execSuccess then
-        warn("[FarmBot] Rayfield execution failed: " .. tostring(rayFieldResult))
-        setStatus("Rayfield exec failed")
-        return false
-    end
-    
-    if not rayFieldResult then
-        warn("[FarmBot] Rayfield returned nil")
-        setStatus("Rayfield is nil")
-        return false
-    end
-    
-    print("[FarmBot] Rayfield loaded successfully!")
-    Rayfield = rayFieldResult
-
-    -- Create window
-    local windowSuccess, Window = pcall(function()
-        return Rayfield:CreateWindow({
-            Name = "Auto Route Tool",
-            LoadingTitle = "Auto Route Tool",
-            LoadingSubtitle = "by YourName",
-            ConfigurationSaving = {
-                Enabled = true,
-                FolderName = "AutoRouteTool",
-                FileName = "Settings"
-            },
-            Discord = {
-                Enabled = false,
-                Invite = "noinvitelink",
-                RememberJoins = true
-            },
-            KeySystem = false
-        })
-    end)
-    
-    if not windowSuccess then
-        warn("[FarmBot] CreateWindow failed: " .. tostring(Window))
-        return false
-    end
-    
-    if not Window then
-        warn("[FarmBot] Window is nil")
-        return false
-    end
-    
-    print("[FarmBot] Window created successfully!")
-    
-    -- Create tab
-    local tabSuccess, MainTab = pcall(function()
-        return Window:CreateTab("Main", 0)
-    end)
-    
-    if not tabSuccess or not MainTab then
-        warn("[FarmBot] CreateTab failed")
-        return false
-    end
-
-    print("[FarmBot] Creating toggle...")
-    
-    -- Create toggle
-    local toggleSuccess, toggle = pcall(function()
-        return MainTab:CreateToggle({
-            Name = "Farm exp (Feather bush)",
-            CurrentValue = false,
-            Flag = "FarmExpToggle",
-            Callback = function(Value)
-                print("[FarmBot] Toggle changed to: " .. tostring(Value))
-                if Value then
-                    startFarming()
-                else
-                    stopFarming()
-                end
-            end
-        })
-    end)
-    
-    if not toggleSuccess or not toggle then
-        warn("[FarmBot] CreateToggle failed")
-        return false
-    end
-    
-    farmToggle = toggle
-    print("[FarmBot] UI initialized successfully!")
-    return true
-end
-
--- Initialize on script load
-print("[FarmBot] Starting initialization...")
-task.wait(1) -- Give the game a moment to load
-
-if initializeUI() then
-    print("[FarmBot] âœ“ Farming bot ready!")
-    setStatus("Farming bot ready!")
-else
-    print("[FarmBot] âœ— Failed to initialize UI")
-    setStatus("Init failed - check console")
-end
+Window:Cleanup()
